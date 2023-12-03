@@ -1,1 +1,0 @@
-Sólo se añaden los archivos App.js y addresses.js de la dapp_ipf porque son los que se modifican

@@ -1,0 +1,126 @@
+import React, { useCallback, useEffect, useState } from "react";
+import './App.css';
+import { create } from 'kubo-rpc-client'
+import { ethers } from "ethers"
+import { Buffer } from "buffer"
+import logo from "./ethereumLogo.png"
+import { addresses, abis } from "./contracts"
+const ZERO_ADDRESS =
+"0x0000000000000000000000000000000000000000000000000000000000000000";
+let client;
+const defaultProvider = new ethers.providers.Web3Provider(window.ethereum);
+// version 6
+//const defaultProvider = new ethers.BrowserProvider(window.ethereum);
+const ipfsContract = new ethers.Contract(
+addresses.ipfs,
+abis.ipfs,
+defaultProvider
+);
+//contract = new ethers.Contract(address, abi, defaultProvider);
+async function readCurrentUserFile() {
+const result = await ipfsContract.userFiles(
+defaultProvider.getSigner().getAddress()
+);
+console.log({ result });
+return result;
+}
+function App() {
+const [ipfsHash, setIpfsHash] = useState("");
+useEffect(() => {
+window.ethereum.enable();
+}, []);
+/*
+*
+let abi = JSON.parse('[{"inputs": [{"internalType": "string","name": "file","type": 
+"string"}],"name": "setFileIPFS","outputs": [],"stateMutability": 
+"nonpayable","type": "function"},{"inputs": [{"internalType": "address","name": 
+"","type": "address"}],"name": "userFiles","outputs": [{"internalType": 
+"string","name": "","type": "string"}],"stateMutability": "view","type": 
+"function"}]')
+let address = "0x7d2C909F0b4d2fb2993b92CC343A6834585831BF";
+*
+*/
+let [connected, setConnected] = useState(false);
+const [file, setFile] = useState(null);
+useEffect(() => {
+async function readFile() {
+const file = await readCurrentUserFile();
+if (file !== ZERO_ADDRESS) setIpfsHash(file);
+}
+readFile();
+}, []);
+async function setFileIPFS(hash) {
+const ipfsWithSigner = ipfsContract.connect(defaultProvider.getSigner());
+console.log("TX contract");
+const tx = await ipfsWithSigner.setFileIPFS(hash);
+console.log({ tx });
+setIpfsHash(hash);
+}
+const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      // Obtener datos del formulario
+      const formData = new FormData(e.target);
+      const name = formData.get("name");
+      const epoca = formData.get("epoca");
+      const date = formData.get("date");
+      const author = formData.get("author");
+
+      // Crear contenido del archivo txt
+      const fileContent = `Nombre: ${name}\nEpoca: ${epoca}\nFecha: ${date}\nAutor: ${author}`;
+
+      // Crear un objeto Blob con el contenido del archivo
+      const blob = new Blob([fileContent], { type: "text/plain" });
+
+      // Conectar a la instancia en local de IPFS
+      const ipfsClient = await create('/ip4/0.0.0.0/tcp/5001');
+
+      // Añadir el archivo a IPFS
+      const result = await ipfsClient.add(blob);
+
+      // Añadir al sistema de archivos del nodo IPFS en local para visualizarlo en el dashboard
+      await ipfsClient.files.cp(`/ipfs/${result.cid}`, `/${result.cid}`);
+      console.log(result.cid);
+
+      // Añadir el CID de IPFS a Ethereum a través del contrato inteligente
+      await setFileIPFS(result.cid.toString());
+    } catch (error) {
+      console.log(error.message);
+    }
+  };
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <img src={logo} className="App-logo" alt="logo" />
+        <p>
+          Rellene el formulario con los datos de la obra a subastar.
+        </p>
+        <form className="form" onSubmit={handleSubmit}>
+          {/* Campos del formulario */}
+          <label>
+            Nombre: &nbsp; <input type="text" name="name" required />
+          </label>
+          <br />
+          <label>
+            Época: &nbsp; <input type="text" name="epoca" required />
+          </label>
+          <br />
+          <label>
+            Fecha subasta: &nbsp; <input type="date" name="date" required />
+          </label>
+          <br />
+          <label>
+            Autor: &nbsp; <input type="text" name="author" required />
+          </label>
+          <br />
+          {/* Botón para subir el archivo */}
+          <button type="submit" className="btn">Upload</button>
+        </form>
+      </header>
+    </div>
+  );
+}
+
+export default App;
+//http://0.0.0.0:5001/ipfs/bafybeibozpulxtpv5nhfa2ue3dcjx23ndh3gwr5vwllk7ptoyfwnfjjr4q/#/files

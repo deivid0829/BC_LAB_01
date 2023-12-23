@@ -1,0 +1,174 @@
+//SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.10;
+
+import "./Activo.sol";
+
+contract SubastaArte{
+    address public propietario;
+    uint public duracionSubasta;
+
+    struct Apuesta {
+        address bidder;
+        uint256 amount;
+        uint256 timestamp;
+    }
+
+    enum AuctionStatus {Active, Inactive}  
+
+    struct ObraDeArte {
+        string titulo;
+        string autor;
+        uint256 fechaSubasta;
+        address seller;
+        address contractAddress; // Contract where the item exists
+        uint256 momentoFinalSubasta;
+        uint256 precioMinimo;
+        
+    }
+
+    ObraDeArte[] public subastas;
+    mapping(uint => Apuesta[]) apuestas;
+    mapping(address => uint[]) public auctionsRunByUser; // Pointer to auctions index for auctions run by this user
+    mapping(address => uint[]) public auctionsBidOnByUser; // Pointer to auctions index for auctions this user has bid on
+    mapping(address => uint256) refunds;
+    mapping(uint => uint) preciosGanadores;
+    mapping(uint => address) Ganadores;
+    mapping(uint => AuctionStatus) status;
+    
+
+    event NuevaSubasta(uint obraID, address creador);
+    event NuevaOferta(uint obraID, address participante, uint cantidad);
+    event SubastaFinalizada(uint obraID, address ganador, uint cantidad);
+
+    constructor(uint _duracionSubasta) {
+        propietario = msg.sender;
+        duracionSubasta = _duracionSubasta;
+        
+    }
+
+    modifier soloPropietario() {
+        require(msg.sender == propietario, "Solo el propietario puede llamar a esta funcion.");
+        _;
+    }
+
+    modifier onlySeller(uint256 auctionId) {
+        require(subastas[auctionId].seller == msg.sender, "Not the seller");
+        _;
+    }
+
+    modifier subastaActiva(uint obraID) {
+        require(status[obraID] == AuctionStatus.Active, "Subasta no activa");
+        require(block.timestamp < subastas[obraID].momentoFinalSubasta, "La subasta ha finalizado.");
+        _;
+    }
+
+    function iniciarNuevaSubasta(string memory _titulo, string memory _autor, address _contractAddressOfAsset, 
+        uint _precioInicial) external returns (uint256) {
+        require(_precioInicial >=0 , "El precio de salida no puede ser menor que 0");
+
+        subastas.push(ObraDeArte(_titulo, _autor, block.timestamp,msg.sender,_contractAddressOfAsset,block.timestamp + duracionSubasta, _precioInicial));
+        auctionsRunByUser[msg.sender].push(subastas.length - 1);
+        preciosGanadores[subastas.length-1] = 0;
+        Ganadores[subastas.length-1] = address(0);
+        status[subastas.length-1] = AuctionStatus.Active;
+        return subastas.length-1;
+        
+    }
+
+
+    function getAuctionCount() external view returns (uint256) {
+        return subastas.length;
+    }
+
+    function getStatus(uint256 idx) external view returns (uint256) {
+        return uint256(status[idx]);
+    }
+
+    function getPrecioGanador(uint256 idx) external view returns (uint256) {
+        return preciosGanadores[idx];
+    }
+
+    function getGanador(uint256 idx) external view returns (address) {
+        return Ganadores[idx];
+    }
+
+    function getAuctionsCountForUser(address addr) external view returns (uint256) {
+        return auctionsRunByUser[addr].length;
+    }
+
+    function getAuctionIdForUserAndIdx(address addr, uint256 idx) external view returns (uint256) {
+        return auctionsRunByUser[addr][idx];
+    }
+
+    /* BIDS */
+    function getBidCountForAuction(uint256 auctionId) external view returns (uint256) {
+        return apuestas[auctionId].length;
+    }
+
+    function getBidForAuctionByIdx(uint256 auctionId, uint256 idx) external view returns (address bidder, uint256 amount, uint256 timestamp) {
+       
+        require(idx < apuestas[auctionId].length, "No existe la apuesta");
+
+        return (apuestas[auctionId][idx].bidder, apuestas[auctionId][idx].amount, apuestas[auctionId][idx].timestamp);
+    }
+
+    function realizarOferta(uint _obraID) external payable subastaActiva(_obraID) {
+        require(msg.value > subastas[_obraID].precioMinimo, "La oferta debe superar el precio minimo.");
+        require(msg.value > preciosGanadores[_obraID], "La oferta debe ser mayor que la oferta actual");
+
+        
+        uint256 bidIdx = apuestas[_obraID].length;
+        apuestas[_obraID].push(Apuesta(msg.sender,msg.value,block.timestamp));
+        preciosGanadores[_obraID] = msg.value;
+        Ganadores[_obraID] = msg.sender;
+        if (auctionsBidOnByUser[msg.sender].length == 0){
+            refunds[msg.sender] = 0;
+        }
+
+
+        // Log refunds for the previous bidder
+        if (bidIdx > 0) {
+            Apuesta memory previousBid = (apuestas[_obraID])[bidIdx - 1];
+            refunds[previousBid.bidder] += previousBid.amount;
+        }
+        auctionsBidOnByUser[msg.sender].push(_obraID);
+        emit NuevaOferta(_obraID, msg.sender, msg.value);
+    }
+
+    function getRefundValue() external view returns (uint256) {
+        return refunds[msg.sender];
+    }
+
+    function withdrawRefund() external {
+        uint256 refund = refunds[msg.sender];
+        refunds[msg.sender] = 0;
+        require(payable(msg.sender).send(refund), "Reembolso fallido");
+    }
+
+    function finalizarSubasta(uint _obraID) external soloPropietario returns(address){
+        // Check if the auction is passed the end date
+        address topbidder = address(0);
+
+        // Make sure auction hasn't already been ended
+        require(status[_obraID] == AuctionStatus.Active, "La subasta ya ha finalizado");
+
+        if (block.timestamp < subastas[_obraID].momentoFinalSubasta) {
+            revert("La subasta no se puede cerrar todavia");
+        }
+
+
+        if (apuestas[_obraID].length != 0){
+            topbidder = apuestas[_obraID][apuestas[_obraID].length - 1].bidder;
+
+            uint256 sellerShare = preciosGanadores[_obraID];
+
+            refunds[subastas[_obraID].seller] += sellerShare;
+        }
+        
+        status[_obraID] = AuctionStatus.Inactive;
+        emit SubastaFinalizada(_obraID, Ganadores[_obraID], preciosGanadores[_obraID]);
+
+        return topbidder;
+
+    }
+}

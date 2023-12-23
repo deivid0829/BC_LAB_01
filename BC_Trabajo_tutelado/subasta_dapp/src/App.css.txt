@@ -1,0 +1,234 @@
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+h1{
+ color:white;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    
+  }
+}
+
+.App-header {
+  background-color: white;
+  min-height: 10vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+/* App.css */
+
+/* App.css */
+
+body {
+  font-family: 'Arial', sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+
+.form-container {
+  max-width: 100px;
+  padding: 20px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+label {
+  display: block;
+  margin: 10px 0 5px;
+  font-weight: bold;
+}
+
+input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+}
+
+button {
+  margin-top: 10px;
+  width: 30%;
+  padding: 10px;
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  font-weight: bold;
+  
+}
+
+p{
+ 
+ font-weight: bold;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+
+
+
+
+/* Header.css */
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background-color: #333; /* Color de fondo de la barra de encabezado */
+  color: #fff; /* Color de texto */
+  
+}
+
+.left-section {
+  display: flex;
+  align-items: center;
+  margin-left:30px;
+}
+
+.app-logo {
+  width: 100px; /* Ajusta el ancho del logo según tus necesidades */
+  height: 100px;
+  margin-right: 10px;
+}
+
+.app-title {
+  font-size: 1.5rem; /* Ajusta el tamaño de la fuente según tus necesidades */
+}
+
+.right-section {
+  display: flex;
+  align-items: center;
+  margin-right:30px;
+}
+
+.user-info {
+  text-align: right;
+}
+
+.user-info p {
+  margin: 0;
+}
+
+.user-info button {
+  margin-left: 10px;
+}
+
+#formularioObra {
+  max-width: 900px;
+  margin: 0 auto;
+  padding:10px;
+  margin-top: 20px;
+  background-color: #f8f8f8;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+#formularioObra p {
+  font-size:30px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+#formularioObra label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+#formularioObra input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+#formularioObra button {
+  width: 100%;
+  padding: 10px;
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#formularioObra button:hover {
+  background-color: #0056b3;
+}
+
+#obras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  
+}
+
+.obra {
+  border: 3px solid #ddd;
+  padding: 15px;
+  margin: 50px auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  width: 500px; /* Ajusta el ancho según sea necesario */
+}
+
+.obra ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.obras p {
+  font-size:30px;
+  text-align: center;
+  margin-bottom: 8px;
+  margin-top: 50px;
+}
+
+.obra li {
+  margin-bottom: 8px;
+}
+
+.obra input {
+  width: 40%;
+  padding: 8px;
+  margin-bottom: 16px;
+  margin-right: 20px;
+  box-sizing: border-box;
+}
+
+.obra button {
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.obra button:hover {
+  background-color: #0056b3;
+}

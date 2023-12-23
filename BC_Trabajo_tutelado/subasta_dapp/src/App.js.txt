@@ -1,0 +1,319 @@
+import React, { useState, useEffect } from 'react';
+import {ToastContainer, toast} from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { ethers } from "ethers"
+import { Buffer } from "buffer"
+import Web3 from 'web3';
+import logo from "./ethereumLogo.png"
+import { create } from 'kubo-rpc-client'
+import { addresses, abis } from "./contracts"
+import './App.css';
+
+const web3 = new Web3(window.ethereum);
+const subasta = new web3.eth.Contract(abis.ipfs, addresses.ipfs);
+      
+function App() {
+  const [userAccount, setUserAccount] = useState(null);
+  const [accountInterval, setAccountInterval] = useState(null);
+  const [ipfs, setIpfs] = useState(null);
+  const [subastas, setSubastas] = useState([]);
+  const [refunds, setRefunds] = useState(0);
+  const [informacionSubasta, setInformacionSubasta] = useState({
+    estado: '',
+    precioGanador: '',
+    ganador: ''
+  });
+
+  useEffect(() => {
+    const startApp = async () => {
+     try{
+      const accounts = await web3.eth.getAccounts();
+      setUserAccount(accounts[0]);
+
+      const accountInterval = setInterval(async () => {
+        // Comprobar si la cuenta ha sido cambiada
+        const currentAccounts = await web3.eth.getAccounts();
+        if (currentAccounts[0] !== userAccount) {
+          setUserAccount(currentAccounts[0]);
+          // Llamar a la función que va a actualizar la UI con la nueva cuenta
+        }
+      }, 100);
+      setAccountInterval(accountInterval)
+
+      /// Iniciar conexión a IPFS
+      const ipfs = await create('/ip4/0.0.0.0/tcp/5001');
+      setIpfs(ipfs)
+    
+
+      // Actualizar la interfaz después de cambios en la base de datos
+      await getParticipatingArtworks(userAccount);
+      } catch(error) {
+          toast.warn("Error con la cuenta");
+          console.log(error.message);
+       }
+    };
+
+    startApp();
+
+    // Limpieza cuando el componente se desmonta
+    return () => {
+      clearInterval(accountInterval);
+    };
+  }, [userAccount]);
+
+  async function getParticipatingArtworks(participant){
+    // Obtener todas las subastas de la base de datos
+    const longitudDelArray = await subasta.methods.getAuctionCount().call();
+	console.log(longitudDelArray);
+        // Inicializar un array para almacenar todos los elementos
+        const artworks = [];
+
+        // Iterar sobre la longitud del array y obtener cada elemento
+        for (let i = 0; i < longitudDelArray; i++) {
+            const elemento = await subasta.methods.subastas(i).call();
+            console.log(elemento.titulo)
+            artworks.push(elemento);
+         }
+    setSubastas(artworks);
+  };
+
+  async function iniciarSubasta() {
+   try{
+    const titulo = document.getElementById('titulo').value;
+    const autor = document.getElementById('autor').value;
+    const precioInicial = document.getElementById('precioInicial').value;
+    const address = document.getElementById('address').value;
+
+    // Llamar a la función del contrato inteligente para iniciar la subasta
+    const obraID = await subasta.methods.iniciarNuevaSubasta(titulo, autor, address, precioInicial).send({
+      from: userAccount,
+      gas: 3000000,// Establecer el límite de gas según sea necesario
+    });
+
+    //const obraID = resultado.events.NuevaSubasta.returnValues.obraID;
+    // Almacenar información en OrbitDB
+    await almacenarInformacionEnOrbitDB(titulo, autor, address, precioInicial);
+
+    // Actualizar la interfaz después de cambios en la base de datos
+    await getParticipatingArtworks(userAccount);
+    } catch(error) {
+        toast.warn("Operación no permitida");
+        console.log(error.message);
+    }
+  };
+
+  const almacenarInformacionEnOrbitDB = async (titulo, autor, address, precioInicial) => {
+    // Crear contenido del archivo txt
+      const fileContent = `Nombre: ${titulo}\nActivo: ${address}\nAutor: ${autor}\nPrecio inicial: ${precioInicial}`;
+
+      // Crear un objeto Blob con el contenido del archivo
+      const blob = new Blob([fileContent], { type: "text/plain" });
+
+      // Conectar a la instancia en local de IPFS
+      const ipfsClient = await create('/ip4/0.0.0.0/tcp/5001');
+
+      // Añadir el archivo a IPFS
+      const result = await ipfsClient.add(blob);
+
+      // Añadir al sistema de archivos del nodo IPFS en local para visualizarlo en el dashboard
+      await ipfsClient.files.cp(`/ipfs/${result.cid}`, `/${result.cid}`);
+      console.log(result.cid);
+  };
+  
+  async function finalizarSubasta(obraID) {
+   try{
+    // Llamar a la función del contrato inteligente para finalizar la subasta
+     await subasta.methods.finalizarSubasta(obraID).send({
+      from: userAccount,
+      gas: 3000000,// Establecer el límite de gas según sea necesario
+    });
+    const ganadoraddress = await subasta.methods.getGanador(obraID).call()
+    const activoaddress = (await subasta.methods.subastas(obraID).call()).contractAddress;
+    if (ganadoraddress !== "0x0000000000000000000000000000000000000000"){
+      const activocontract = new web3.eth.Contract(abis.act, activoaddress);
+      await activocontract.methods.setOwner(ganadoraddress).send({
+      from: userAccount,
+      gas: 3000000,// Establecer el límite de gas según sea necesario
+     });
+    }
+    // Actualizar la interfaz después de cambios en la base de datos
+    await getParticipatingArtworks(userAccount);
+    } catch(error){
+        toast.warn("Operación no permitida");
+        console.log(error.message);
+     }
+  };
+  
+  async function pujar(obraID) {
+    try {
+      const cantidadWei = document.getElementById(`cantidadpuja${obraID}`).value;
+
+      // Verificar el saldo del usuario
+      const saldoUsuario = await web3.eth.getBalance(userAccount);
+      if (saldoUsuario < cantidadWei) {
+        // El usuario no tiene suficiente saldo
+        toast.warn("No tienes suficiente ether");
+        console.error("Saldo insuficiente para realizar la oferta");
+        return;
+      }
+
+      // Llamar a la función del contrato inteligente para realizar la oferta
+      await subasta.methods.realizarOferta(obraID).send({
+        from: userAccount,
+        gas: 3000000,
+        value: cantidadWei, // Enviar la cantidad como valor en wei
+        // Establecer el límite de gas según sea necesario
+      });
+
+      // Actualizar la interfaz después de cambios en la base de datos
+      await getParticipatingArtworks(userAccount);
+    } catch (error) {
+      toast.warn("Operación no permitida");
+      console.log(error.message);
+      // Manejar el error según tus necesidades (mostrar un mensaje de error, etc.)
+    }
+  };
+
+  async function getRefundValue() {
+    if (web3 && subasta && userAccount) {
+      try {
+        // Llamar a la función 'getRefundValue' del contrato
+        const result = await subasta.methods.getRefundValue().call({ from: userAccount });
+        setRefunds(result.toLocaleString());
+      } catch (error) {
+        toast.warn("Operación no permitida");
+        console.error('Error al obtener el valor de la devolución:', error);
+      }
+    }
+  };
+
+  async function withdrawRefund () {
+    if (web3 && subasta && userAccount) {
+      try {
+        // Llamar a la función 'withdrawRefund' del contrato
+        await subasta.methods.withdrawRefund().send({ from: userAccount, gas: 3000000, });
+        setRefunds(0); // Reiniciar el valor de las devoluciones después de retirarlas
+      } catch (error) {
+      	toast.warn("Operación no permitida");
+        console.error('Error al retirar la devolución:', error);
+      }
+    }
+  };
+  
+  async function obtenerInformacionSubasta(indice) {
+    try {
+      const estado = await subasta.methods.getStatus(indice).call();
+      const precioGanador = await subasta.methods.getPrecioGanador(indice).call();
+      const ganador = await subasta.methods.getGanador(indice).call();
+
+      setInformacionSubasta({
+        estado: estado,
+        precioGanador: precioGanador,
+        ganador: ganador
+      });
+    } catch (error) {
+      console.error("Error al obtener información de subasta:", error);
+    }
+  };
+  
+  async function resetearInformacionSubasta(indice) {
+    try {
+      const estado = ''
+      const precioGanador = ''
+      const ganador = ''
+
+      setInformacionSubasta({
+        estado: estado,
+        precioGanador: precioGanador,
+        ganador: ganador
+      });
+    } catch (error) {
+      console.error("Error al obtener información de subasta:", error);
+    }
+  };
+  
+  
+
+  return (
+    <div>
+     <ToastContainer
+        position="top-right" // Posición en la esquina derecha superior
+        autoClose={5000} // Duración en milisegundos (en este caso, 5 segundos)
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
+     <header className="app-header">
+      <div className="left-section">
+        <img src={logo} className="app-logo" alt="logo" />
+        <h1 className="app-title">Subasta de Arte</h1>
+      </div>
+      <div className="right-section">
+        <div className="user-info">
+          <p>Tu dirección de cuenta: {userAccount}</p>
+          <p>Refunds disponibles: {refunds} wei</p>
+          <p>Ganador: {informacionSubasta.ganador}</p>
+              <p>Precio Ganador: {informacionSubasta.precioGanador.toLocaleString()}</p>
+              <p>Estado: {informacionSubasta.estado.toLocaleString()}</p>
+          <button onClick={getRefundValue}>Obtener Refunds</button>
+          <button onClick={withdrawRefund}>Retirar Refunds</button>
+        </div>
+      </div>
+    </header>
+      <form id="formularioObra">
+      	<p> INICIAR UNA SUBASTA </p>
+        <label htmlFor="titulo">Título de la Obra:</label>
+        <input type="text" id="titulo" name="titulo" required />
+        <label htmlFor="autor">Autor de la Obra:</label>
+        <input type="text" id="autor" name="autor" required />
+        <label htmlFor="precioInicial">Precio Inicial:</label>
+        <input type="number" id="precioInicial" name="precioInicial" required />
+        <label htmlFor="address">Address del activo:</label>
+        <input type="text" id="address" name="address" required />
+        <button type="button" onClick={iniciarSubasta}>
+          Iniciar Subasta
+        </button>
+      </form>
+   
+
+      <div className="obras">
+      	<p> SUBASTAS </p>
+        {subastas.map((obra, index) => (
+          <div className="obra" key={index}>
+            <ul>
+              <li>Título: {obra.titulo}</li>
+              <li>Autor: {obra.autor}</li>
+              <li>Precio Mínimo: {obra.precioMinimo.toLocaleString()}</li>
+              <li>Fecha Inicio Subasta: {Date(obra.fechaSubasta).toLocaleString()}</li>
+              <li>
+              <button type="button" onClick={() => obtenerInformacionSubasta(index)}>
+                Obtener Información Subasta
+              </button>
+            </li>
+            <li>
+              <button type="button" onClick={() => resetearInformacionSubasta(index)}>
+                Resetear Información Subasta
+              </button>
+            </li>
+            </ul>
+            
+            <label htmlFor="precioInicial">Cantidad Puja:</label>
+        <input type="number" id={`cantidadpuja${index}`} name="cantidadpuja" defaultValue="0" />
+            <button type="button" onClick={() => pujar(index)}> Pujar </button>
+
+            <button type="button" onClick={() => finalizarSubasta(index)}>
+              Finalizar Subasta
+            </button>  
+           </div>
+        ))};
+        
+      </div>
+    </div>
+  );
+};
+
+export default App;

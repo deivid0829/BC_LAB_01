@@ -1,0 +1,24 @@
+//SPDX-License-Identifier: GPL-3.0
+pragma solidity ^0.8.10;
+
+// Abstract contract for a not yet agreed upon standard for non-fungible
+// on chain goods
+
+contract Activo {
+    string private name;
+    address private ownerAddress;
+
+    constructor(string memory _name) {
+        ownerAddress = msg.sender;
+        name = _name;
+        
+    }
+    function owner() public view returns (address  _ownerAddress){
+        return ownerAddress;
+    }
+
+    function setOwner(address _newOwner) public returns (bool success){
+        ownerAddress = _newOwner;
+        return true;
+    }
+}
